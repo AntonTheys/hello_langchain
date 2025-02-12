@@ -9,6 +9,7 @@ from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.chains import RetrievalQA
 import gradio as gr
 
+# Load my thesis
 loader = PDFPlumberLoader("/home/tonny/Projects/hello_langchain/data/atheys-EndToEndLearningToPredictArcheologicalPotential-1-3.pdf")
 docs = loader.load()
 
@@ -19,15 +20,16 @@ documents = text_splitter.split_documents(docs)
 # Instantiate the embedding model
 embedder = HuggingFaceEmbeddings()
 
-# Create the vector store 
+# Create the vector store for efficient similarity search
 vector = FAISS.from_documents(documents, embedder)
 
-# Input
-retriever = vector.as_retriever(search_type="similarity", search_kwargs={"k": 1})
+# Convert to a retriever that fetches relevant documents
+retriever = vector.as_retriever(search_type="similarity", search_kwargs={"k": 3})
 
 # Define llm
 llm = Ollama(model="mistral")
 
+# Define prompt template
 prompt = """
 1. Use the following pieces of context to answer the question at the end.
 2. If you don't know the answer, just say that "I don't know" but don't make up an answer on your own.\n
@@ -39,9 +41,10 @@ Question: {question}
 
 Helpful Answer:"""
 
-
+# Init prompt template
 QA_CHAIN_PROMPT = PromptTemplate.from_template(prompt) 
 
+# Create the chain
 llm_chain = LLMChain(
                   llm=llm, 
                   prompt=QA_CHAIN_PROMPT, 
@@ -53,6 +56,7 @@ document_prompt = PromptTemplate(
     template="Context:\ncontent:{page_content}\nsource:{source}",
 )
 
+# Combine retrieved documents into a single context for the LLM
 combine_documents_chain = StuffDocumentsChain(
                   llm_chain=llm_chain,
                   document_variable_name="context",
@@ -60,6 +64,7 @@ combine_documents_chain = StuffDocumentsChain(
                   callbacks=None,
               )
 
+# Create a retrieval-based QA system using the LLM and document retriever
 qa = RetrievalQA(
                   combine_documents_chain=combine_documents_chain,
                   verbose=True,
@@ -67,10 +72,11 @@ qa = RetrievalQA(
                   return_source_documents=True,
               )
 
+# Define the function that takes user input and returns the chatbot's response
 def respond(question,history):
     return qa(question)["result"]
 
-
+# Launch gradio app
 gr.ChatInterface(
     respond,
     chatbot=gr.Chatbot(height=500),
